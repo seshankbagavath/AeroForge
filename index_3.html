@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AeroForge — Aircraft Wing Design Platform</title>
+<meta name="description" content="An interactive aircraft wing design platform: generate wing shapes, simulate airflow, estimate structural loads, and evolve an optimal design — all in your browser." />
+<script src="vendor/three.min.js"></script>
+<style>
+/* Self-hosted fonts (no external CDN) */
+@font-face{font-family:'Geist';font-style:normal;font-weight:400;font-display:swap;src:url('vendor/fonts/geist-sans-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'Geist';font-style:normal;font-weight:500;font-display:swap;src:url('vendor/fonts/geist-sans-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Geist';font-style:normal;font-weight:600;font-display:swap;src:url('vendor/fonts/geist-sans-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:400;font-display:swap;src:url('vendor/fonts/space-grotesk-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;src:url('vendor/fonts/space-grotesk-latin-500-normal.woff2') format('woff2')}
+:root{
+  --canvas:#f6f3ec; --surface:#fffdf9; --surface-warm:#faf7f0; --beige:#ece6db;
+  --border:#e1dacb; --text:#1c1a16; --muted:#6b6557;
+  --green:#1f4d3a; --green-hover:#2e6b50; --green-deep:#173a2c; --green-tint:#e3ede6;
+  --radius:12px; --radius-sm:8px; --shadow:0 1px 2px rgba(28,26,22,.05);
+  --shadow-lift:0 10px 34px rgba(28,26,22,.09);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'Geist',-apple-system,system-ui,sans-serif;background:var(--canvas);
+  color:var(--text);line-height:1.5;-webkit-font-smoothing:antialiased}
+.mono,.label,.tag,.stat-label,.nav-section-title{font-family:'Space Grotesk',sans-serif}
+a{color:inherit}
+.landing{min-height:100vh;display:flex;flex-direction:column;
+  background:radial-gradient(120% 70% at 50% -10%, #eef2ec 0%, var(--canvas) 46%)}
+.lp-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;max-width:1180px;margin:0 auto;width:100%}
+.brand{display:flex;align-items:center;gap:11px}
+.brand-mark{width:34px;height:34px;border-radius:9px;background:var(--green);display:grid;place-items:center;color:#fff}
+.brand-mark svg{width:20px;height:20px}
+.brand-name{font-weight:600;letter-spacing:-.02em;font-size:17px}
+.brand-sub{font-family:'Space Grotesk';font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.09em}
+.lp-nav-links{display:flex;gap:8px;align-items:center}
+.hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:60px 24px 40px;max-width:880px;margin:0 auto}
+.hero .eyebrow{display:inline-flex;align-items:center;gap:7px;font-family:'Space Grotesk';font-size:12px;letter-spacing:.04em;color:var(--green);background:var(--green-tint);padding:6px 13px;border-radius:20px;margin-bottom:26px}
+.hero h1{font-size:clamp(34px,6vw,58px);font-weight:600;letter-spacing:-.03em;line-height:1.05;margin-bottom:20px}
+.hero h1 .accent{color:var(--green)}
+.hero p.sub{font-size:clamp(16px,2.2vw,20px);color:var(--muted);max-width:620px;margin:0 auto 34px;line-height:1.55}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.chips{display:flex;gap:9px;flex-wrap:wrap;justify-content:center;margin-top:40px;max-width:680px}
+.chip{font-family:'Space Grotesk';font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--border);padding:8px 14px;border-radius:20px}
+.features{max-width:1100px;margin:20px auto 0;padding:48px 24px 70px;width:100%}
+.features h2{text-align:center;font-size:13px;font-family:'Space Grotesk';text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:30px}
+.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.feature{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;box-shadow:var(--shadow);transition:transform .18s,box-shadow .18s,border-color .18s}
+.feature:hover{transform:translateY(-3px);box-shadow:var(--shadow-lift);border-color:#cfe0d5}
+.feature .ico{width:38px;height:38px;border-radius:9px;background:var(--green-tint);display:grid;place-items:center;color:var(--green);margin-bottom:14px}
+.feature .ico svg{width:20px;height:20px;stroke-width:1.7}
+.feature h3{font-size:15px;font-weight:600;margin-bottom:6px}
+.feature p{font-size:13.5px;color:var(--muted);line-height:1.5}
+.lp-foot{text-align:center;padding:26px;color:var(--muted);font-size:12.5px;border-top:1px solid var(--border)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:var(--radius-sm);font-size:14.5px;font-weight:500;cursor:pointer;border:1px solid transparent;font-family:inherit;transition:background .15s,box-shadow .15s;text-decoration:none}
+.btn-primary{background:var(--green);color:#fff}
+.btn-primary:hover{background:var(--green-hover)}
+.btn-primary:disabled{opacity:.55;cursor:not-allowed}
+.btn-ghost{background:var(--surface);border-color:var(--border);color:var(--text)}
+.btn-ghost:hover{background:var(--beige)}
+.btn svg{width:17px;height:17px;stroke-width:1.8}
+.btn-lg{padding:14px 26px;font-size:15.5px}
+.app{display:none;grid-template-columns:240px 1fr 330px;height:100vh;overflow:hidden}
+.app.active{display:grid}
+.landing.hidden{display:none}
+.sidebar{background:var(--surface-warm);border-right:1px solid var(--border);padding:22px 16px;display:flex;flex-direction:column;gap:24px;overflow-y:auto}
+.sidebar .brand{cursor:pointer}
+.nav-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);padding:0 8px 8px}
+.nav-item{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:var(--radius-sm);color:var(--muted);font-size:14px;cursor:pointer;border:none;background:none;width:100%;text-align:left;transition:background .15s,color .15s}
+.nav-item svg{width:17px;height:17px;stroke-width:1.6;flex:none}
+.nav-item:hover{background:var(--beige);color:var(--text)}
+.nav-item.active{background:var(--green-tint);color:var(--green);font-weight:500}
+.nav-num{margin-left:auto;font-family:'Space Grotesk';font-size:11px;color:var(--muted);background:var(--beige);width:18px;height:18px;border-radius:5px;display:grid;place-items:center}
+.nav-item.active .nav-num{background:#fff;color:var(--green)}
+.main{overflow-y:auto;padding:24px 30px}
+.page-head{margin-bottom:20px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.page-head h1{font-size:22px;font-weight:600;letter-spacing:-.02em}
+.page-head p{color:var(--muted);font-size:14px;margin-top:3px;max-width:560px}
+.grid{display:grid;gap:16px}
+.grid-2{grid-template-columns:1fr 1fr}.grid-3{grid-template-columns:repeat(3,1fr)}.grid-4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.card-title{font-size:14px;font-weight:600}.card-sub{font-size:12px;color:var(--muted)}
+.stat{display:flex;flex-direction:column;gap:4px}
+.stat-label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.stat-value{font-size:25px;font-weight:600;letter-spacing:-.02em}
+.stat-value small{font-size:13px;color:var(--muted);font-weight:500}
+.stat-delta{font-size:12px;font-family:'Space Grotesk'}
+.up{color:var(--green-hover)}.down{color:#b4685a}
+.viewport{width:100%;height:380px;border-radius:var(--radius);background:var(--canvas);border:1px solid var(--border);overflow:hidden;cursor:grab;position:relative}
+.viewport:active{cursor:grabbing}
+.viewport .vp-hint{position:absolute;bottom:10px;left:12px;font-family:'Space Grotesk';font-size:11px;color:var(--muted);background:rgba(255,255,255,.7);padding:3px 8px;border-radius:6px;pointer-events:none}
+canvas.chart{width:100%;height:220px;display:block}
+.context{background:var(--surface-warm);border-left:1px solid var(--border);padding:22px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
+.context h3{font-size:13px;font-weight:600;text-transform:uppercase;font-family:'Space Grotesk';letter-spacing:.05em;color:var(--muted)}
+.field{margin-bottom:14px}
+.field label{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}
+.field label span{color:var(--green);font-family:'Space Grotesk';font-weight:500}
+.field .help{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4}
+input[type=range]{width:100%;-webkit-appearance:none;height:4px;border-radius:4px;background:var(--border);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--green);cursor:pointer;border:2px solid #fff;box-shadow:0 0 0 1px var(--border)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--green);cursor:pointer;border:2px solid #fff}
+select{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);font-family:inherit;font-size:13px;color:var(--text)}
+.tag{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;background:var(--green-tint);color:var(--green);font-weight:500}
+.tag.neutral{background:var(--beige);color:var(--muted)}
+.tag.warn{background:#f6ece3;color:#a8693f}
+.divider{height:1px;background:var(--border);margin:2px 0}
+.seg{display:flex;gap:4px;background:var(--beige);padding:3px;border-radius:var(--radius-sm)}
+.seg button{flex:1;padding:6px;border:none;background:none;border-radius:6px;font-family:'Space Grotesk';font-size:12px;color:var(--muted);cursor:pointer}
+.seg button.active{background:var(--surface);color:var(--green);box-shadow:var(--shadow)}
+.row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:7px 0;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:none}
+.row .k{color:var(--muted)}.row .v{font-family:'Space Grotesk';font-weight:500}
+.page{display:none}.page.active{display:block}
+.progress{height:6px;background:var(--beige);border-radius:4px;overflow:hidden}
+.progress>div{height:100%;background:var(--green);width:0;transition:width .2s}
+.hint{font-size:12px;color:var(--muted);line-height:1.5}
+.callout{background:var(--green-tint);border:1px solid #d4e6dc;border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:#234c3c;line-height:1.5}
+.plain{background:var(--beige);border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:var(--text);line-height:1.55;margin-top:12px}
+.plain b{color:var(--green)}
+@media(max-width:1100px){.app.active{grid-template-columns:200px 1fr}.context{display:none}.feature-grid{grid-template-columns:1fr}}
+@media(max-width:680px){.app.active{grid-template-columns:1fr}.sidebar{display:none}.lp-nav{padding:16px 20px}}
+</style>
+</head>
+<body>
+
+<div class="landing" id="landing">
+  <nav class="lp-nav">
+    <div class="brand"><div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12 L20 5 L14 12 L20 19 Z"/></svg></div>
+      <div><div class="brand-name">AeroForge</div><div class="brand-sub">Wing Design Lab</div></div></div>
+    <div class="lp-nav-links"><a class="btn btn-ghost" href="#how">How it works</a><button class="btn btn-primary" id="enterBtn1">Open the platform</button></div>
+  </nav>
+  <header class="hero">
+    <div class="eyebrow"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/><circle cx="12" cy="12" r="3"/></svg>Interactive aerospace engineering, in your browser</div>
+    <h1>Design an aircraft wing.<br><span class="accent">Watch the physics respond.</span></h1>
+    <p class="sub">AeroForge generates wing shapes, simulates the airflow over them, checks whether they'd hold up under load, and then evolves an optimal design — all live, with nothing to install.</p>
+    <div class="hero-cta"><button class="btn btn-primary btn-lg" id="enterBtn2">Open the platform<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button><a class="btn btn-ghost btn-lg" href="#how">See how it works</a></div>
+    <div class="chips"><div class="chip">NACA airfoils</div><div class="chip">Lift &amp; drag simulation</div><div class="chip">Structural stress</div><div class="chip">Genetic optimization</div><div class="chip">Interactive 3D</div></div>
+  </header>
+  <section class="features" id="how">
+    <h2>What it does — in five steps</h2>
+    <div class="feature-grid">
+      <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 18 L12 4 L21 18"/><path d="M3 18 L21 18"/></svg></div><h3>1 · Shape the wing</h3><p>Adjust span, width, sweep and the airfoil profile with simple sliders. The wing rebuilds in 3D as you move them.</p></div>
+      <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 8c4 0 6-3 10-3s8 3 8 3"/><path d="M3 14c4 0 6-3 10-3"/><path d="M3 19c4 0 6-2 9-2"/></svg></div><h3>2 · Simulate the air</h3><p>A physics model estimates how much lift the wing makes, how much drag it suffers, and where pressure builds across the surface.</p></div>
+      <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20 L4 8 L20 8"/><path d="M4 8 L12 4 L20 8"/><path d="M8 8 L8 20 M12 8 L12 20 M16 8 L16 20"/></svg></div><h3>3 · Check the strength</h3><p>It treats the wing as a beam, calculates the bending stress at every point, and tells you if it would survive flight loads.</p></div>
+      <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg></div><h3>4 · Evolve the best</h3><p>A genetic algorithm breeds hundreds of wing designs across generations, keeping the ones that fly efficiently and safely.</p></div>
+      <div class="feature"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></div><h3>5 · Read the results</h3><p>A clean dashboard shows efficiency, lift, drag and safety at a glance — with charts you can actually interpret.</p></div>
+      <div class="feature" style="background:var(--green);border-color:var(--green)"><div class="ico" style="background:rgba(255,255,255,.16);color:#fff"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div><h3 style="color:#fff">Ready when you are</h3><p style="color:#dce9e2">No sign-up, no setup. Everything runs in this tab.<br><br><button class="btn btn-ghost" id="enterBtn3" style="background:#fff">Open the platform</button></p></div>
+    </div>
+  </section>
+  <footer class="lp-foot">AeroForge · a reduced-order wing design tool · runs entirely in your browser.</footer>
+</div>
+
+<div class="app" id="app">
+  <aside class="sidebar">
+    <div class="brand" id="homeBrand" title="Back to home"><div class="brand-mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12 L20 5 L14 12 L20 19 Z"/></svg></div><div><div class="brand-name">AeroForge</div><div class="brand-sub">Wing Design Lab</div></div></div>
+    <nav>
+      <div class="nav-section-title">Workflow</div>
+      <button class="nav-item active" data-page="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard</button>
+      <button class="nav-item" data-page="geometry"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 18 L12 4 L21 18"/><path d="M3 18 L21 18"/></svg>Shape<span class="nav-num">1</span></button>
+      <button class="nav-item" data-page="aero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 8c4 0 6-3 10-3s8 3 8 3"/><path d="M3 14c4 0 6-3 10-3"/><path d="M3 19c4 0 6-2 9-2"/></svg>Airflow<span class="nav-num">2</span></button>
+      <button class="nav-item" data-page="structure"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 20 L4 8 L20 8"/><path d="M4 8 L12 4 L20 8"/><path d="M8 8 L8 20 M12 8 L12 20 M16 8 L16 20"/></svg>Strength<span class="nav-num">3</span></button>
+      <button class="nav-item" data-page="optimize"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>Optimize<span class="nav-num">4</span></button>
+    </nav>
+    <div style="margin-top:auto"><div class="divider"></div><div class="hint" style="padding:10px 8px 0">New here? Start on <b>Shape</b> and move down the list. The Dashboard updates live.</div></div>
+  </aside>
+
+  <main class="main">
+    <section class="page active" id="page-dashboard">
+      <div class="page-head"><div><h1>Dashboard</h1><p>A live summary of how your current wing performs. Lower drag and a higher lift-to-drag ratio mean a more efficient wing.</p></div></div>
+      <div class="grid grid-4" id="kpis"></div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card"><div class="card-head"><div class="card-title">Your wing in 3D</div><div class="seg" id="colorMode"><button class="active" data-mode="solid">Solid</button><button data-mode="pressure">Pressure</button><button data-mode="stress">Stress</button></div></div><div class="viewport" id="viewport3d"><div class="vp-hint">drag to rotate · scroll to zoom</div></div></div>
+        <div class="card"><div class="card-head"><div class="card-title">Efficiency curve</div><div class="card-sub">lift vs drag</div></div><canvas class="chart" id="polarChart"></canvas><div class="plain">Each dot is the wing at a different angle. Points further <b>up and to the left</b> mean more lift for less drag.</div></div>
+      </div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card"><div class="card-head"><div class="card-title">Where the lift comes from</div></div><canvas class="chart" id="liftChart"></canvas><div class="plain">Lift across the wing from root to tip. A smooth, rounded shape is the efficient ideal.</div></div>
+        <div class="card"><div class="card-head"><div class="card-title">Pressure on the surface</div></div><canvas class="chart" id="cpChart"></canvas><div class="plain">The gap between the two lines is the suction that holds the aircraft up.</div></div>
+      </div>
+    </section>
+    <section class="page" id="page-geometry">
+      <div class="page-head"><div><h1>Shape the wing</h1><p>Use the sliders on the right to change the wing. Everything else in the app reacts to what you set here.</p></div></div>
+      <div class="callout" style="margin-bottom:16px">New to this? The defaults are a sensible starting wing. Nudge one slider at a time and watch the 3D shape and the numbers move.</div>
+      <div class="grid grid-2">
+        <div class="card"><div class="card-head"><div class="card-title">Airfoil — the side-on slice</div><div class="card-sub" id="airfoilName">NACA 2412</div></div><canvas class="chart" id="airfoilChart" style="height:200px"></canvas><div class="plain">This is the cross-section that gives a wing its lift. The curve on top is what speeds air up and creates suction.</div></div>
+        <div class="card"><div class="card-head"><div class="card-title">Key measurements</div></div><div id="planformStats"></div><div class="plain" style="margin-top:14px"><b>Aspect ratio</b> is how long and slender the wing is — gliders have high numbers, fighter jets low ones.</div></div>
+      </div>
+      <div class="card" style="margin-top:16px"><div class="card-head"><div class="card-title">3D preview</div><div class="card-sub">drag to rotate</div></div><div class="viewport" id="viewportGeo" style="height:320px"><div class="vp-hint">drag to rotate · scroll to zoom</div></div></div>
+    </section>
+    <section class="page" id="page-aero">
+      <div class="page-head"><div><h1>Airflow</h1><p>How the wing behaves in moving air: how much lift it makes, how much drag holds it back, and how pressure is spread across it.</p></div></div>
+      <div class="grid grid-4" id="aeroKpis"></div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card"><div class="card-head"><div class="card-title">Efficiency vs angle</div></div><canvas class="chart" id="ldChart"></canvas><div class="plain">As a wing tilts up it makes more lift — until it tilts too far and efficiency falls off. The peak is the sweet spot.</div></div>
+        <div class="card"><div class="card-head"><div class="card-title">Lift across the span</div></div><canvas class="chart" id="liftChart2"></canvas></div>
+      </div>
+      <div class="card" style="margin-top:16px"><div class="card-head"><div class="card-title">Pressure distribution</div><div class="card-sub">upper &amp; lower surfaces</div></div><canvas class="chart" id="cpChart2"></canvas></div>
+    </section>
+    <section class="page" id="page-structure">
+      <div class="page-head"><div><h1>Strength</h1><p>Lift bends the wing upward. This checks whether it can take that bending without breaking.</p></div></div>
+      <div class="grid grid-4" id="structKpis"></div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card"><div class="card-head"><div class="card-title">Bending force</div><div class="card-sub">root → tip</div></div><canvas class="chart" id="momentChart"></canvas><div class="plain">Bending is highest where the wing meets the body — like the base of a diving board.</div></div>
+        <div class="card"><div class="card-head"><div class="card-title">Stress vs the limit</div></div><canvas class="chart" id="stressChart"></canvas><div class="plain">The green line is your wing's stress. The red line is the material's breaking point — stay below it.</div></div>
+      </div>
+      <div class="card" style="margin-top:16px" id="structSummary"></div>
+    </section>
+    <section class="page" id="page-optimize">
+      <div class="page-head"><div><h1>Optimize</h1><p>Let the computer search for a better wing. It breeds hundreds of designs and keeps the ones that fly efficiently while staying strong enough.</p></div></div>
+      <div class="callout" style="margin-bottom:16px">Press <b>Run optimization</b> in the right panel. Watch the curve climb as each generation improves — then apply the winner to your design.</div>
+      <div class="grid grid-4" id="optKpis"></div>
+      <div class="grid grid-2" style="margin-top:16px">
+        <div class="card"><div class="card-head"><div class="card-title">Improvement over time</div><div class="card-sub" id="genLabel">not started</div></div><canvas class="chart" id="convChart"></canvas></div>
+        <div class="card"><div class="card-head"><div class="card-title">Best wing found</div></div><div class="viewport" id="viewportOpt" style="height:240px"><div class="vp-hint">drag to rotate</div></div></div>
+      </div>
+      <div class="card" style="margin-top:16px" id="optResult"><div class="hint">Set your goals in the right panel, then run the optimizer.</div></div>
+    </section>
+  </main>
+  <aside class="context" id="contextPanel"></aside>
+</div>
+
+<script>
+"use strict";
+(function(){
+// ============================================================
+// AeroForge — combined single-file logic (no ES modules)
+// ============================================================
+
+// ---------- GEOMETRY ----------
+const Geometry = (function(){
+  function naca4(code,n){ n=n||80;
+    const m=parseInt(code[0],10)/100, p=parseInt(code[1],10)/10, t=parseInt(code.slice(2),10)/100;
+    const xu=[],yu=[],xl=[],yl=[],camber=[];
+    for(let i=0;i<n;i++){
+      const beta=Math.PI*i/(n-1), x=0.5*(1-Math.cos(beta));
+      const yt=5*t*(0.2969*Math.sqrt(x)-0.1260*x-0.3516*x*x+0.2843*x*x*x-0.1015*x*x*x*x);
+      let yc=0,dyc=0;
+      if(x<p&&p>0){ yc=(m/(p*p))*(2*p*x-x*x); dyc=(2*m/(p*p))*(p-x); }
+      else if(p>0){ yc=(m/((1-p)*(1-p)))*((1-2*p)+2*p*x-x*x); dyc=(2*m/((1-p)*(1-p)))*(p-x); }
+      const th=Math.atan(dyc);
+      xu.push(x-yt*Math.sin(th)); yu.push(yc+yt*Math.cos(th));
+      xl.push(x+yt*Math.sin(th)); yl.push(yc-yt*Math.cos(th));
+      camber.push({x:x,yc:yc});
+    }
+    return {xu,yu,xl,yl,camber,m,p,t};
+  }
+  function airfoilOutline(code,n){ const a=naca4(code,n||80); const pts=[];
+    for(let i=a.xu.length-1;i>=0;i--) pts.push([a.xu[i],a.yu[i]]);
+    for(let i=0;i<a.xl.length;i++) pts.push([a.xl[i],a.yl[i]]);
+    return pts;
+  }
+  function buildWing(params,sections,nAir){ sections=sections||12; nAir=nAir||60;
+    const span=params.span,rootChord=params.rootChord,tipChord=params.tipChord,sweep=params.sweep,airfoil=params.airfoil,twist=params.twist||0;
+    const halfSpan=span/2, sweepRad=sweep*Math.PI/180, stations=[];
+    for(let s=0;s<=sections;s++){
+      const frac=s/sections, y=frac*halfSpan, chord=rootChord+(tipChord-rootChord)*frac;
+      const xLE=y*Math.tan(sweepRad), tw=(twist*Math.PI/180)*frac;
+      const af=naca4(airfoil,nAir), ring=[];
+      const push=(xa,ya)=>{ const cx=(xa-0.25)*chord, cz=ya*chord;
+        const xr=cx*Math.cos(tw)-cz*Math.sin(tw), zr=cx*Math.sin(tw)+cz*Math.cos(tw);
+        ring.push([xLE+xr+0.25*chord, y, zr]); };
+      for(let i=0;i<af.xu.length;i++) push(af.xu[i],af.yu[i]);
+      for(let i=af.xl.length-1;i>=0;i--) push(af.xl[i],af.yl[i]);
+      stations.push({y,chord,xLE,ring});
+    }
+    return {stations,params,halfSpan};
+  }
+  function planformStats(params){
+    const span=params.span,rootChord=params.rootChord,tipChord=params.tipChord,sweep=params.sweep;
+    const area=span*(rootChord+tipChord)/2, ar=(span*span)/area, taper=tipChord/rootChord;
+    const mac=(2/3)*rootChord*(1+taper+taper*taper)/(1+taper);
+    return {area,ar,taper,mac,sweep};
+  }
+  return {naca4,airfoilOutline,buildWing,planformStats};
+})();
+
+// ---------- AERO ----------
+const Aero = (function(){
+  const RHO=1.225, MU=1.81e-5;
+  function airfoil2D(naca){ const a0=2*Math.PI; const alpha0_deg=-naca.m*100*1.1; return {a0,alpha0:alpha0_deg*Math.PI/180}; }
+  function solve(A,b){ const n=b.length, M=A.map((row,i)=>row.concat([b[i]]));
+    for(let c=0;c<n;c++){ let piv=c;
+      for(let r=c+1;r<n;r++) if(Math.abs(M[r][c])>Math.abs(M[piv][c])) piv=r;
+      const tmp=M[c]; M[c]=M[piv]; M[piv]=tmp;
+      const d=M[c][c]||1e-12;
+      for(let r=0;r<n;r++){ if(r===c) continue; const f=M[r][c]/d;
+        for(let k=c;k<=n;k++) M[r][k]-=f*M[c][k]; } }
+    return M.map((row,i)=>row[n]/(row[i]||1e-12));
+  }
+  function liftingLine(params,planform,alphaDeg,V,naca,N){ N=N||24;
+    const b=params.span, ar=planform.ar, af2=airfoil2D(naca), a0=af2.a0, alpha0=af2.alpha0;
+    const alpha=alphaDeg*Math.PI/180, theta=[],yLoc=[],chordLoc=[];
+    for(let i=1;i<=N;i++){ const th=i*Math.PI/(N+1); theta.push(th);
+      const y=-(b/2)*Math.cos(th); yLoc.push(y);
+      const frac=Math.abs(y)/(b/2); chordLoc.push(params.rootChord+(params.tipChord-params.rootChord)*frac); }
+    const A=[],rhs=[];
+    for(let i=0;i<N;i++){ const c=chordLoc[i],th=theta[i],mu=(a0*c)/(4*b),row=[];
+      for(let j=0;j<N;j++){ const nn=j+1; row.push(Math.sin(nn*th)*(1+mu*nn/Math.sin(th))); }
+      A.push(row); rhs.push(mu*(alpha-alpha0)); }
+    const a=solve(A,rhs);
+    const CL=Math.PI*ar*a[0]; let delta=0;
+    for(let nn=2;nn<=N;nn++) delta+=nn*Math.pow(a[nn-1]/a[0],2);
+    const e=1/(1+delta), CDi=(CL*CL)/(Math.PI*ar*e);
+    const dist=theta.map((th,i)=>{ let g=0; for(let nn=1;nn<=N;nn++) g+=a[nn-1]*Math.sin(nn*th);
+      const gamma=2*b*V*g, lLocal=RHO*V*gamma; return {y:yLoc[i],lift:lLocal,gamma}; });
+    return {CL,CDi,e,dist,a};
+  }
+  function parasiteDrag(planform,V,naca){ const Re=RHO*V*planform.mac/MU;
+    const Cf=0.074/Math.pow(Math.max(Re,1e4),0.2);
+    const ff=1+2.7*naca.t+100*Math.pow(naca.t,4); const CD0=Cf*ff*2.0;
+    return {CD0,Re};
+  }
+  function solvePoint(params,planform,naca,alphaDeg,V){
+    const ll=liftingLine(params,planform,alphaDeg,V,naca), pd=parasiteDrag(planform,V,naca);
+    const CD=ll.CDi+pd.CD0, q=0.5*RHO*V*V, L=ll.CL*q*planform.area, D=CD*q*planform.area;
+    return {CL:ll.CL,CDi:ll.CDi,CD0:pd.CD0,CD,LD:ll.CL/CD,L,D,e:ll.e,Re:pd.Re,dist:ll.dist,q};
+  }
+  function dragPolar(params,planform,naca,V,aMin,aMax,step){ aMin=aMin==null?-4:aMin; aMax=aMax==null?16:aMax; step=step||1;
+    const pts=[]; for(let a=aMin;a<=aMax+1e-9;a+=step){ const r=solvePoint(params,planform,naca,a,V);
+      pts.push({alpha:a,CL:r.CL,CD:r.CD,LD:r.LD}); } return pts;
+  }
+  function pressureDistribution(naca,alphaDeg,n){ n=n||60;
+    const code=naca.code||(''+Math.round(naca.m*100)+Math.round(naca.p*10)+(''+Math.round(naca.t*100)).padStart(2,'0'));
+    const af=Geometry.naca4(code,n), alpha=alphaDeg*Math.PI/180, upper=[],lower=[];
+    for(let i=0;i<af.xu.length;i++){ const x=af.xu[i], le=Math.sqrt(Math.max(1-x,0.0001));
+      const vU=1+(0.6*af.yu[i]*6+0.5*Math.sin(alpha)*4)*le;
+      const vL=1-(0.6*Math.abs(af.yl[i])*6+0.5*Math.sin(alpha)*2)*le;
+      upper.push({x,cp:1-vU*vU}); lower.push({x,cp:1-vL*vL}); }
+    return {upper,lower};
+  }
+  return {RHO,solvePoint,dragPolar,liftingLine,pressureDistribution,airfoil2D};
+})();
+
+// ---------- STRUCTURE ----------
+const Structure = (function(){
+  const MATERIAL={name:'Al 6061-T6',E:68.9e9,yield:276e6,rho:2700};
+  function sectionProps(chord,thickRatio){ const h=thickRatio*chord*0.8, w=chord*0.12, tWall=Math.max(h*0.08,0.002);
+    const I=(w*Math.pow(h,3)-(w-2*tWall)*Math.pow(h-2*tWall,3))/12, Z=I/(h/2), area=w*h-(w-2*tWall)*(h-2*tWall);
+    return {I,Z,h,area};
+  }
+  function analyze(params,planform,aero,loadFactor,material){ loadFactor=loadFactor||2.5; material=material||MATERIAL;
+    const half=aero.dist.filter(d=>d.y>=0).sort((a,b)=>a.y-b.y);
+    if(half.length<2) return null;
+    const halfSpan=params.span/2, n=half.length;
+    const stations=half.map(d=>{ const frac=d.y/halfSpan, chord=params.rootChord+(params.tipChord-params.rootChord)*frac;
+      const sec=sectionProps(chord,params.thickRatio!=null?params.thickRatio:0.12);
+      return {y:d.y,chord,lift:Math.abs(d.lift)*loadFactor,sec}; });
+    let V=0,M=0;
+    for(let i=n-1;i>=0;i--){ const dy=i===n-1?(stations[i].y-stations[i-1].y):(stations[i+1].y-stations[i].y);
+      V+=stations[i].lift*dy; M+=V*dy; stations[i].shear=V; stations[i].moment=M; stations[i].stress=M/stations[i].sec.Z; }
+    let slope=0,defl=0;
+    for(let i=0;i<n-1;i++){ const dy=stations[i+1].y-stations[i].y, EI=material.E*stations[i].sec.I, curv=stations[i].moment/EI;
+      slope+=curv*dy; defl+=slope*dy; }
+    const maxStress=Math.max.apply(null,stations.map(s=>s.stress)), rootStress=stations[0].stress, safety=material.yield/maxStress;
+    let mass=0; for(let i=0;i<n-1;i++){ const dy=stations[i+1].y-stations[i].y; mass+=stations[i].sec.area*dy*material.rho; } mass*=2;
+    let worst=0; stations.forEach((s,i)=>{ if(s.stress>stations[worst].stress) worst=i; });
+    return {stations,maxStress,rootStress,safety,tipDeflection:defl,mass,material,worstStation:stations[worst],pass:safety>=1.5};
+  }
+  return {analyze,sectionProps,MATERIAL};
+})();
+
+// ---------- OPTIMIZER ----------
+const Optimizer = (function(){
+  const BOUNDS={span:[4,16],rootChord:[0.8,3.0],tipChord:[0.3,2.0],sweep:[0,35],twist:[-6,0],airfoilT:[8,18]};
+  const KEYS=Object.keys(BOUNDS);
+  const rand=(a,b)=>a+Math.random()*(b-a), clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+  function randomGenome(){ const g={}; for(const k of KEYS) g[k]=rand(BOUNDS[k][0],BOUNDS[k][1]);
+    if(g.tipChord>g.rootChord) g.tipChord=g.rootChord*0.6; return g; }
+  function genomeToParams(g){ const tPct=Math.round(g.airfoilT), airfoil='24'+(''+tPct).padStart(2,'0');
+    return {span:g.span,rootChord:g.rootChord,tipChord:Math.min(g.tipChord,g.rootChord),sweep:g.sweep,twist:g.twist,airfoil,thickRatio:tPct/100}; }
+  function evaluate(g,cfg){ const params=genomeToParams(g), planform=Geometry.planformStats(params);
+    const naca=Geometry.naca4(params.airfoil); naca.code=params.airfoil;
+    const aero=Aero.solvePoint(params,planform,naca,cfg.alpha,cfg.V), struct=Structure.analyze(params,planform,aero,cfg.loadFactor);
+    const liftMargin=aero.L/(cfg.targetLift||1); let fit=0;
+    fit+=aero.LD*2.0; fit-=struct.mass*0.05;
+    if(struct.safety<cfg.minSafety) fit-=(cfg.minSafety-struct.safety)*40;
+    if(liftMargin<1) fit-=(1-liftMargin)*60;
+    if(aero.CL>1.4) fit-=(aero.CL-1.4)*30;
+    return {genome:g,params,planform,aero,struct,fitness:fit,liftMargin};
+  }
+  function crossover(a,b){ const c={}; for(const k of KEYS) c[k]=Math.random()<0.5?a[k]:b[k]; return c; }
+  function mutate(g,rate,scale){ const m=Object.assign({},g);
+    for(const k of KEYS){ if(Math.random()<rate){ const lo=BOUNDS[k][0],hi=BOUNDS[k][1];
+      m[k]=clamp(m[k]+(Math.random()-0.5)*(hi-lo)*scale,lo,hi); } } return m; }
+  function tournament(pop,k){ k=k||3; let best=null;
+    for(let i=0;i<k;i++){ const c=pop[Math.floor(Math.random()*pop.length)]; if(!best||c.fitness>best.fitness) best=c; }
+    return best.genome; }
+  function run(cfg,onGen){ const popSize=cfg.popSize||40, gens=cfg.generations||30, eliteN=Math.max(2,Math.round(popSize*0.1));
+    let pop=Array.from({length:popSize},()=>evaluate(randomGenome(),cfg)); const history=[]; let gen=0;
+    function step(){ pop.sort((a,b)=>b.fitness-a.fitness); const best=pop[0];
+      history.push({gen,best:best.fitness,avg:pop.reduce((s,p)=>s+p.fitness,0)/pop.length,LD:best.aero.LD,mass:best.struct.mass});
+      if(onGen) onGen(gen,best,history);
+      if(gen>=gens-1) return {best,history};
+      const next=pop.slice(0,eliteN);
+      while(next.length<popSize){ const p1=tournament(pop),p2=tournament(pop); let child=crossover(p1,p2);
+        child=mutate(child,cfg.mutRate||0.25,cfg.mutScale||0.3);
+        if(child.tipChord>child.rootChord) child.tipChord=child.rootChord*0.6;
+        next.push(evaluate(child,cfg)); }
+      pop=next; gen++; return null;
+    }
+    return {step,getState:()=>({gen,history})};
+  }
+  return {run,evaluate,randomGenome,genomeToParams,BOUNDS};
+})();
+
+// ---------- VIZ ----------
+const Viz = (function(){
+  let scene,camera,renderer,wingGroup,raf,webglOK=true;
+  let theta=0.6,phi=0.9,radius=11,dragging=false,lx=0,ly=0;
+  function showFallback(container,msg){
+    container.innerHTML='<div style="position:absolute;inset:0;display:flex;flex-direction:column;'+
+      'align-items:center;justify-content:center;gap:8px;padding:20px;text-align:center;color:var(--muted)">'+
+      '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#9a9384" stroke-width="1.5"><path d="M2 12 L20 5 L14 12 L20 19 Z"/></svg>'+
+      '<div style="font-family:\'Space Grotesk\';font-size:13px;max-width:240px;line-height:1.5">'+msg+'</div></div>';
+  }
+  function initThree(container){ const THREE=window.THREE;
+    if(!THREE){ webglOK=false; showFallback(container,'3D preview needs the graphics library, which didn\u2019t load. Everything else on this page still works.'); return false; }
+    const w=container.clientWidth||600, h=container.clientHeight||380;
+    try{
+      scene=new THREE.Scene(); scene.background=new THREE.Color(0xf6f3ec);
+      camera=new THREE.PerspectiveCamera(45,w/h,0.1,1000); camera.position.set(6,4,9); camera.lookAt(0,0,0);
+      renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setSize(w,h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+    }catch(err){ webglOK=false;
+      showFallback(container,'Your browser couldn\u2019t start 3D graphics (WebGL). The charts and numbers below still work fully.');
+      scene=camera=renderer=null; return false; }
+    webglOK=true;
+    const hint=container.querySelector('.vp-hint'); container.innerHTML=''; if(hint) container.appendChild(hint);
+    container.appendChild(renderer.domElement);
+    const amb=new THREE.AmbientLight(0xffffff,0.75), dir=new THREE.DirectionalLight(0xffffff,0.7); dir.position.set(5,10,7); scene.add(amb,dir);
+    const grid=new THREE.GridHelper(20,20,0xcfc7b6,0xe1dacb); grid.position.y=-2; scene.add(grid);
+    wingGroup=new THREE.Group(); scene.add(wingGroup);
+    theta=0.6;phi=0.9;radius=11;
+    setupOrbit(container); animate(); return true;
+  }
+  function setupOrbit(container){ const el=renderer.domElement;
+    el.addEventListener('pointerdown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
+    window.addEventListener('pointerup',()=>dragging=false);
+    window.addEventListener('pointermove',e=>{ if(!dragging) return;
+      theta-=(e.clientX-lx)*0.01; phi=Math.max(0.15,Math.min(Math.PI-0.15,phi-(e.clientY-ly)*0.01));
+      lx=e.clientX;ly=e.clientY; });
+    el.addEventListener('wheel',e=>{ e.preventDefault(); radius=Math.max(4,Math.min(30,radius+e.deltaY*0.01)); },{passive:false});
+  }
+  function animate(){ raf=requestAnimationFrame(animate);
+    if(!camera) return;
+    camera.position.x=radius*Math.sin(phi)*Math.cos(theta);
+    camera.position.y=radius*Math.cos(phi);
+    camera.position.z=radius*Math.sin(phi)*Math.sin(theta);
+    camera.lookAt(0,0,0); renderer.render(scene,camera);
+  }
+  function faceColor(opts,spanFrac,chordFrac){ const THREE=window.THREE;
+    if(opts.colorMode==='pressure'){ const t=Math.max(0,1-chordFrac*2);
+      return new THREE.Color().lerpColors(new THREE.Color(0x2e6b50),new THREE.Color(0xbcd9c8),t); }
+    if(opts.colorMode==='stress'){ const t=1-spanFrac;
+      return new THREE.Color().lerpColors(new THREE.Color(0xd8e3dc),new THREE.Color(0x1f4d3a),t); }
+    return new THREE.Color(0x2e6b50);
+  }
+  function renderWing(wing,opts){ opts=opts||{}; const THREE=window.THREE; if(!wingGroup) return;
+    while(wingGroup.children.length) wingGroup.remove(wingGroup.children[0]);
+    const stations=wing.stations, ringLen=stations[0].ring.length;
+    [1,-1].forEach(sign=>{ const positions=[],colors=[];
+      for(let s=0;s<stations.length-1;s++){ const r0=stations[s].ring,r1=stations[s+1].ring;
+        for(let i=0;i<ringLen-1;i++){ const quad=[r0[i],r0[i+1],r1[i],r1[i],r0[i+1],r1[i+1]];
+          for(const p of quad){ positions.push(p[0],p[2],sign*p[1]);
+            const c=faceColor(opts,s/stations.length,i/ringLen); colors.push(c.r,c.g,c.b); } } }
+      const geo=new THREE.BufferGeometry();
+      geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+      geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+      geo.computeVertexNormals();
+      const mat=new THREE.MeshStandardMaterial({vertexColors:true,metalness:0.1,roughness:0.6,side:THREE.DoubleSide});
+      wingGroup.add(new THREE.Mesh(geo,mat));
+    });
+    wingGroup.position.set(0,0,0);
+  }
+  function dispose(){ if(raf) cancelAnimationFrame(raf);
+    if(renderer){ try{ renderer.forceContextLoss&&renderer.forceContextLoss(); }catch(e){} renderer.domElement&&renderer.domElement.remove(); }
+    scene=camera=renderer=wingGroup=null;
+  }
+  function lineChart(canvas,series,opts){ opts=opts||{}; const ctx=canvas.getContext('2d');
+    const dpr=window.devicePixelRatio||1, W=canvas.width=canvas.clientWidth*dpr, H=canvas.height=canvas.clientHeight*dpr;
+    ctx.clearRect(0,0,W,H); const pad=42*dpr;
+    const all=series.reduce((acc,s)=>acc.concat(s.points),[]), xs=all.map(p=>p.x), ys=all.map(p=>p.y);
+    const xMin=opts.xMin!=null?opts.xMin:Math.min.apply(null,xs), xMax=opts.xMax!=null?opts.xMax:Math.max.apply(null,xs);
+    const yMin=opts.yMin!=null?opts.yMin:Math.min.apply(null,ys), yMax=opts.yMax!=null?opts.yMax:Math.max.apply(null,ys);
+    const sx=x=>pad+(x-xMin)/((xMax-xMin)||1)*(W-pad*1.4), sy=y=>H-pad-(y-yMin)/((yMax-yMin)||1)*(H-pad*1.6);
+    ctx.strokeStyle='#e7e3db'; ctx.lineWidth=dpr;
+    ctx.beginPath(); ctx.moveTo(pad,H-pad); ctx.lineTo(W-pad*0.4,H-pad); ctx.moveTo(pad,H-pad); ctx.lineTo(pad,pad*0.6); ctx.stroke();
+    ctx.fillStyle='#6e6a63'; ctx.font=(11*dpr)+"px 'Space Grotesk',sans-serif"; ctx.strokeStyle='#f0ece4';
+    for(let i=0;i<=4;i++){ const yy=yMin+(yMax-yMin)*i/4, py=sy(yy);
+      ctx.beginPath(); ctx.moveTo(pad,py); ctx.lineTo(W-pad*0.4,py); ctx.stroke();
+      ctx.fillText(yy.toFixed(1),4*dpr,py+4*dpr); }
+    for(const s of series){ ctx.strokeStyle=s.color||'#1f4d3a'; ctx.lineWidth=2*dpr; ctx.beginPath();
+      s.points.forEach((p,i)=>{ const X=sx(p.x),Y=sy(p.y); i?ctx.lineTo(X,Y):ctx.moveTo(X,Y); }); ctx.stroke();
+      if(s.dots){ ctx.fillStyle=s.color||'#1f4d3a';
+        s.points.forEach(p=>{ ctx.beginPath(); ctx.arc(sx(p.x),sy(p.y),2.5*dpr,0,7); ctx.fill(); }); } }
+    ctx.fillStyle='#1e1c19'; ctx.font=(12*dpr)+"px 'Space Grotesk',sans-serif";
+    if(opts.xLabel) ctx.fillText(opts.xLabel,W/2-20,H-8*dpr);
+    if(opts.yLabel){ ctx.save(); ctx.translate(12*dpr,H/2); ctx.rotate(-Math.PI/2); ctx.fillText(opts.yLabel,0,0); ctx.restore(); }
+  }
+  function barDist(canvas,points,opts){ opts=opts||{}; const ctx=canvas.getContext('2d');
+    const dpr=window.devicePixelRatio||1, W=canvas.width=canvas.clientWidth*dpr, H=canvas.height=canvas.clientHeight*dpr;
+    ctx.clearRect(0,0,W,H); const pad=38*dpr;
+    const xs=points.map(p=>p.x), ys=points.map(p=>p.y);
+    const xMin=Math.min.apply(null,xs), xMax=Math.max.apply(null,xs), yMax=Math.max.apply(null,ys.concat([0.0001])), yMin=Math.min.apply(null,ys.concat([0]));
+    const sx=x=>pad+(x-xMin)/((xMax-xMin)||1)*(W-pad*1.4), sy=y=>H-pad-(y-yMin)/((yMax-yMin)||1)*(H-pad*1.6);
+    ctx.fillStyle='rgba(46,107,80,0.18)'; ctx.strokeStyle='#1f4d3a'; ctx.lineWidth=2*dpr;
+    ctx.beginPath(); ctx.moveTo(sx(points[0].x),sy(0));
+    points.forEach(p=>ctx.lineTo(sx(p.x),sy(p.y)));
+    ctx.lineTo(sx(points[points.length-1].x),sy(0)); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle='#e7e3db'; ctx.lineWidth=dpr; ctx.beginPath(); ctx.moveTo(pad,sy(0)); ctx.lineTo(W-pad*0.4,sy(0)); ctx.stroke();
+    ctx.fillStyle='#6e6a63'; ctx.font=(11*dpr)+"px 'Space Grotesk',sans-serif";
+    if(opts.xLabel) ctx.fillText(opts.xLabel,W/2-24,H-6*dpr);
+  }
+  return {initThree,renderWing,dispose,lineChart,barDist};
+})();
+
+// ============================================================
+//  CONTROLLER
+// ============================================================
+const state={
+  params:{span:10,rootChord:1.8,tipChord:0.9,sweep:12,twist:-3,airfoil:'2412',thickRatio:0.12},
+  op:{alpha:4,V:60}, loadFactor:2.5,
+  obj:{targetLift:9000,minSafety:1.5,popSize:40,generations:30,mutRate:0.25},
+  colorMode:'solid', results:null
+};
+const $=id=>document.getElementById(id);
+const f=(n,d)=>Number(n).toLocaleString('en-US',{maximumFractionDigits:d==null?1:d,minimumFractionDigits:d==null?1:d});
+const row=(k,v)=>'<div class="row"><span class="k">'+k+'</span><span class="v">'+v+'</span></div>';
+const kpi=(label,value,unit,delta)=>'<div class="card stat"><div class="stat-label">'+label+'</div><div class="stat-value">'+value+(unit?'<small> '+unit+'</small>':'')+'</div>'+(delta?'<div class="stat-delta '+(String(delta).startsWith('-')?'down':'up')+'">'+delta+'</div>':'')+'</div>';
+
+function recompute(){ const p=state.params, planform=Geometry.planformStats(p);
+  const naca=Geometry.naca4(p.airfoil); naca.code=p.airfoil; p.thickRatio=naca.t;
+  const aero=Aero.solvePoint(p,planform,naca,state.op.alpha,state.op.V);
+  const polar=Aero.dragPolar(p,planform,naca,state.op.V);
+  const cp=Aero.pressureDistribution(naca,state.op.alpha);
+  const struct=Structure.analyze(p,planform,aero,state.loadFactor);
+  const wing=Geometry.buildWing(p);
+  state.results={planform,naca,aero,polar,cp,struct,wing}; return state.results;
+}
+
+function renderDashboard(){ const r=state.results;
+  $('kpis').innerHTML=
+    kpi('Lift / Drag',f(r.aero.LD,1),'','efficiency')+
+    kpi('Lift',f(r.aero.L,0),'N')+
+    kpi('Drag',f(r.aero.D,0),'N')+
+    kpi('Safety factor',f(r.struct.safety,2),'',r.struct.pass?'pass':'-below 1.5');
+  ensureViewport('viewport3d'); Viz.renderWing(r.wing,{colorMode:state.colorMode});
+  Viz.lineChart($('polarChart'),[{points:r.polar.map(p=>({x:p.CD,y:p.CL})),color:'#1f4d3a',dots:true}],{xLabel:'drag (CD)',yLabel:'lift (CL)'});
+  const lp=r.aero.dist.filter(d=>d.y>=0).map(d=>({x:d.y,y:Math.abs(d.lift)}));
+  Viz.barDist($('liftChart'),lp,{xLabel:'span (m)'});
+  Viz.lineChart($('cpChart'),[
+    {points:r.cp.upper.map(p=>({x:p.x,y:p.cp})),color:'#1f4d3a'},
+    {points:r.cp.lower.map(p=>({x:p.x,y:p.cp})),color:'#2e6b50'}],
+    {xLabel:'front → back',yLabel:'pressure',yMin:Math.min.apply(null,r.cp.upper.map(p=>p.cp))-0.2,yMax:1.1});
+}
+function renderGeometry(){ const r=state.results;
+  $('airfoilName').textContent='NACA '+state.params.airfoil;
+  const outline=Geometry.airfoilOutline(state.params.airfoil);
+  Viz.lineChart($('airfoilChart'),[{points:outline.map(p=>({x:p[0],y:p[1]})),color:'#1f4d3a'}],{xMin:0,xMax:1,yMin:-0.25,yMax:0.25});
+  $('planformStats').innerHTML=
+    row('Wing area',f(r.planform.area,2)+' m²')+
+    row('Aspect ratio',f(r.planform.ar,2))+
+    row('Taper ratio',f(r.planform.taper,2))+
+    row('Mean chord',f(r.planform.mac,2)+' m')+
+    row('Sweep',f(state.params.sweep,0)+'°')+
+    row('Twist',f(state.params.twist,0)+'°');
+  ensureViewport('viewportGeo'); Viz.renderWing(r.wing,{colorMode:'solid'});
+}
+function renderAero(){ const r=state.results;
+  $('aeroKpis').innerHTML=
+    kpi('Lift coeff. (CL)',f(r.aero.CL,3))+kpi('Drag coeff. (CD)',f(r.aero.CD,4))+
+    kpi('Induced drag',f(r.aero.CDi,4))+kpi('Span efficiency',f(r.aero.e,3));
+  Viz.lineChart($('ldChart'),[{points:r.polar.map(p=>({x:p.alpha,y:p.LD})),color:'#1f4d3a',dots:true}],{xLabel:'angle (°)',yLabel:'L/D'});
+  const lp=r.aero.dist.filter(d=>d.y>=0).map(d=>({x:d.y,y:Math.abs(d.lift)}));
+  Viz.barDist($('liftChart2'),lp,{xLabel:'span (m)'});
+  Viz.lineChart($('cpChart2'),[
+    {points:r.cp.upper.map(p=>({x:p.x,y:p.cp})),color:'#1f4d3a'},
+    {points:r.cp.lower.map(p=>({x:p.x,y:p.cp})),color:'#2e6b50'}],
+    {xLabel:'front → back',yLabel:'pressure',yMax:1.1});
+}
+function renderStructure(){ const r=state.results,s=r.struct;
+  $('structKpis').innerHTML=
+    kpi('Root bending',f(s.stations[0].moment/1000,1),'kN·m')+
+    kpi('Peak stress',f(s.maxStress/1e6,1),'MPa')+
+    kpi('Tip flex',f(s.tipDeflection*1000,1),'mm')+
+    kpi('Spar mass',f(s.mass,1),'kg');
+  Viz.barDist($('momentChart'),s.stations.map(st=>({x:st.y,y:st.moment/1000})),{xLabel:'span (m)'});
+  Viz.lineChart($('stressChart'),[
+    {points:s.stations.map(st=>({x:st.y,y:st.stress/1e6})),color:'#1f4d3a',dots:true},
+    {points:s.stations.map(st=>({x:st.y,y:s.material.yield/1e6})),color:'#b4685a'}],
+    {xLabel:'span (m)',yLabel:'MPa'});
+  const tag=s.pass?'<span class="tag">SAFE · margin '+f(s.safety,2)+'×</span>':'<span class="tag warn">TOO WEAK · '+f(s.safety,2)+'×</span>';
+  $('structSummary').innerHTML='<div class="card-head"><div class="card-title">Verdict</div>'+tag+'</div>'+
+    '<div class="hint">Material: '+s.material.name+' (a common aircraft aluminium). The most heavily loaded point is '+f(s.worstStation.y,2)+' m out from the body, carrying '+f(s.worstStation.stress/1e6,1)+' MPa at a '+state.loadFactor+'g load. '+
+    (s.pass?'This wing has a comfortable safety margin — engineers typically want at least 1.5×.':'This wing would be over-stressed. Try a thicker airfoil, less span, or more taper to bring the margin back above 1.5×.')+'</div>';
+}
+const optState={best:null,history:[]};
+function renderOptimize(){
+  $('optKpis').innerHTML=
+    kpi('Best L/D',optState.best?f(optState.best.aero.LD,1):'—')+
+    kpi('Generation',optState.history.length?optState.history.length-1:'0')+
+    kpi('Best mass',optState.best?f(optState.best.struct.mass,1):'—',optState.best?'kg':'')+
+    kpi('Safety',optState.best?f(optState.best.struct.safety,2):'—');
+  if(optState.history.length)
+    Viz.lineChart($('convChart'),[
+      {points:optState.history.map(h=>({x:h.gen,y:h.best})),color:'#1f4d3a'},
+      {points:optState.history.map(h=>({x:h.gen,y:h.avg})),color:'#bcd0c6'}],
+      {xLabel:'generation',yLabel:'fitness'});
+  if(optState.best){ ensureViewport('viewportOpt'); Viz.renderWing(Geometry.buildWing(optState.best.params),{colorMode:'pressure'});
+    const b=optState.best;
+    $('optResult').innerHTML='<div class="card-head"><div class="card-title">Winning design</div><span class="tag">L/D '+f(b.aero.LD,1)+'</span></div>'+
+      '<div class="grid grid-3">'+
+      '<div>'+row('Span',f(b.params.span,2)+' m')+row('Root chord',f(b.params.rootChord,2)+' m')+row('Tip chord',f(b.params.tipChord,2)+' m')+'</div>'+
+      '<div>'+row('Sweep',f(b.params.sweep,1)+'°')+row('Twist',f(b.params.twist,1)+'°')+row('Airfoil','NACA '+b.params.airfoil)+'</div>'+
+      '<div>'+row('Lift',f(b.aero.L,0)+' N')+row('Drag',f(b.aero.D,0)+' N')+row('Mass',f(b.struct.mass,1)+' kg')+'</div>'+
+      '</div><button class="btn btn-primary" id="applyBest" style="margin-top:14px">Apply this wing to my design</button>';
+    $('applyBest').onclick=()=>{ Object.assign(state.params,b.params); buildControls('dashboard'); go('dashboard'); };
+  }
+}
+
+function slider(id,label,min,max,step,val,unit,help){ unit=unit||'';
+  return '<div class="field"><label>'+label+'<span id="'+id+'-val">'+val+unit+'</span></label>'+
+    '<input type="range" id="'+id+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+val+'">'+
+    (help?'<div class="help">'+help+'</div>':'')+'</div>';
+}
+function buildControls(page){ const c=$('contextPanel'), p=state.params, o=state.op;
+  if(page==='optimize'){
+    c.innerHTML='<h3>Your goals</h3>'+
+      slider('targetLift','Lift it must make',2000,20000,500,state.obj.targetLift,' N','How much weight the wing needs to hold up.')+
+      slider('minSafety','Minimum safety',1.2,3,0.1,state.obj.minSafety,'','How much stronger than the breaking point it must be.')+
+      '<div class="divider"></div><h3>Search settings</h3>'+
+      slider('popSize','Designs per round',20,80,5,state.obj.popSize)+
+      slider('generations','Rounds',10,80,5,state.obj.generations)+
+      slider('mutRate','Variety',0.05,0.6,0.05,state.obj.mutRate,'','Higher = bolder, more random changes.')+
+      '<button class="btn btn-primary" id="runOpt">Run optimization</button>'+
+      '<div class="progress" style="margin-top:12px"><div id="optProg"></div></div>'+
+      '<div class="hint" style="margin-top:8px">Testing at angle '+o.alpha+'° and '+o.V+' m/s airspeed.</div>';
+    bindObj(); $('runOpt').onclick=runOptimizer; return;
+  }
+  c.innerHTML='<h3>Wing shape</h3>'+
+    slider('span','Wing span',4,16,0.5,p.span,' m','Tip-to-tip length. Longer = more efficient, but heavier.')+
+    slider('rootChord','Width at body',0.8,3,0.1,p.rootChord,' m')+
+    slider('tipChord','Width at tip',0.3,2,0.1,p.tipChord,' m')+
+    slider('sweep','Sweep back',0,35,1,p.sweep,'°','How far the wing angles backward.')+
+    slider('twist','Twist',-6,0,0.5,p.twist,'°','Gentle tip twist that helps stall behaviour.')+
+    '<div class="divider"></div><h3>Airfoil</h3>'+
+    '<div class="field"><label>Profile shape</label><select id="airfoil">'+
+      ['0012','2412','2415','4412','4415','6409','23012'].map(a=>'<option '+(a===p.airfoil?'selected':'')+'>'+a+'</option>').join('')+
+    '</select><div class="help">The standard NACA codes. Higher numbers = more curved.</div></div>'+
+    '<div class="divider"></div><h3>Flight conditions</h3>'+
+    slider('alpha','Angle into wind',-4,16,0.5,o.alpha,'°','How steeply the wing meets the air.')+
+    slider('V','Airspeed',20,120,5,o.V,' m/s')+
+    slider('loadFactor','Load factor',1,4,0.5,state.loadFactor,' g','Tight turns multiply the load — 2.5g is a common limit.');
+  bindDesign(page);
+}
+function bindDesign(page){
+  const bind=(id,obj,key,unit)=>{ const el=$(id); if(!el) return; unit=unit||'';
+    el.oninput=()=>{ obj[key]=parseFloat(el.value); const lab=$(id+'-val'); if(lab) lab.textContent=el.value+unit; refresh(page); }; };
+  bind('span',state.params,'span',' m'); bind('rootChord',state.params,'rootChord',' m');
+  bind('tipChord',state.params,'tipChord',' m'); bind('sweep',state.params,'sweep','°');
+  bind('twist',state.params,'twist','°'); bind('alpha',state.op,'alpha','°');
+  bind('V',state.op,'V',' m/s'); bind('loadFactor',state,'loadFactor',' g');
+  const af=$('airfoil'); if(af) af.onchange=()=>{ state.params.airfoil=af.value; refresh(page); };
+}
+function bindObj(){ const bind=(id,key,unit)=>{ const el=$(id); unit=unit||'';
+    el.oninput=()=>{ state.obj[key]=parseFloat(el.value); $(id+'-val').textContent=el.value+unit; }; };
+  bind('targetLift','targetLift',' N'); bind('minSafety','minSafety');
+  bind('popSize','popSize'); bind('generations','generations'); bind('mutRate','mutRate');
+}
+
+function runOptimizer(){ const btn=$('runOpt'); btn.disabled=true; btn.textContent='Running…';
+  optState.history=[]; optState.best=null;
+  const cfg={alpha:state.op.alpha,V:state.op.V,loadFactor:state.loadFactor,
+    targetLift:state.obj.targetLift,minSafety:state.obj.minSafety,
+    popSize:state.obj.popSize,generations:state.obj.generations,mutRate:state.obj.mutRate};
+  const runner=Optimizer.run(cfg,(gen,best,history)=>{ optState.best=best; optState.history=history.slice();
+    $('genLabel').textContent='generation '+gen;
+    const prog=$('optProg'); if(prog) prog.style.width=(100*(gen+1)/cfg.generations)+'%';
+    renderOptimize(); });
+  function loop(){ const done=runner.step();
+    if(done){ btn.disabled=false; btn.textContent='Run optimization'; return; }
+    requestAnimationFrame(loop); }
+  loop();
+}
+
+let activeContainer=null;
+function ensureViewport(id){ const el=$(id); if(activeContainer===el) return;
+  Viz.dispose(); Viz.initThree(el); activeContainer=el; }
+
+let currentPage='dashboard';
+function refresh(page){ recompute();
+  ({dashboard:renderDashboard,geometry:renderGeometry,aero:renderAero,structure:renderStructure,optimize:renderOptimize}[page]||renderDashboard)();
+}
+function go(page){ currentPage=page;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.page===page));
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+page));
+  activeContainer=null; buildControls(page); refresh(page);
+}
+
+// ---------- landing ↔ app ----------
+function enterApp(){ $('landing').classList.add('hidden'); $('app').classList.add('active');
+  activeContainer=null; go('dashboard');
+  window.scrollTo(0,0);
+}
+function goHome(){ Viz.dispose(); activeContainer=null;
+  $('app').classList.remove('active'); $('landing').classList.remove('hidden'); window.scrollTo(0,0); }
+
+['enterBtn1','enterBtn2','enterBtn3'].forEach(id=>{ const b=$(id); if(b) b.addEventListener('click',enterApp); });
+$('homeBrand').addEventListener('click',goHome);
+
+document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>go(n.dataset.page)));
+$('colorMode').addEventListener('click',e=>{ const btn=e.target.closest('button'); if(!btn) return;
+  state.colorMode=btn.dataset.mode;
+  document.querySelectorAll('#colorMode button').forEach(b=>b.classList.toggle('active',b===btn));
+  if(state.results) Viz.renderWing(state.results.wing,{colorMode:state.colorMode}); });
+
+window.addEventListener('resize',()=>{ if(activeContainer){ Viz.dispose(); Viz.initThree(activeContainer);
+  if(state.results){ const m=(currentPage==='optimize'&&optState.best)?'pressure':(currentPage==='geometry'?'solid':state.colorMode);
+    const wing=(currentPage==='optimize'&&optState.best)?Geometry.buildWing(optState.best.params):state.results.wing;
+    Viz.renderWing(wing,{colorMode:m}); } } });
+
+// landing is shown by default; app initializes on enter.
+})();
+</script>
+
+</body>
+</html>
