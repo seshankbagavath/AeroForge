@@ -91,6 +91,11 @@ a{color:inherit}
 .viewport{width:100%;height:380px;border-radius:var(--radius);background:var(--canvas);border:1px solid var(--border);overflow:hidden;cursor:grab;position:relative}
 .viewport:active{cursor:grabbing}
 .viewport .vp-hint{position:absolute;bottom:10px;left:12px;font-family:'Space Grotesk';font-size:11px;color:var(--muted);background:rgba(255,255,255,.7);padding:3px 8px;border-radius:6px;pointer-events:none}
+.viewport canvas{display:block;width:100%!important;height:100%!important}
+.legend{margin-top:12px;display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-size:11px;color:var(--muted)}
+.legend .bar{flex:1;height:10px;border-radius:5px;background:linear-gradient(90deg,rgb(26,77,242),rgb(26,217,242),rgb(38,204,64),rgb(242,204,26),rgb(235,41,31))}
+.legend .lo,.legend .hi{white-space:nowrap}
+.legend .lbl{font-weight:500;color:var(--text);margin-right:2px}
 canvas.chart{width:100%;height:220px;display:block}
 .context{background:var(--surface-warm);border-left:1px solid var(--border);padding:22px 18px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
 .context h3{font-size:13px;font-weight:600;text-transform:uppercase;font-family:'Space Grotesk';letter-spacing:.05em;color:var(--muted)}
@@ -171,7 +176,7 @@ select{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:
       <div class="page-head"><div><h1>Dashboard</h1><p>A live summary of how your current wing performs. Lower drag and a higher lift-to-drag ratio mean a more efficient wing.</p></div></div>
       <div class="grid grid-4" id="kpis"></div>
       <div class="grid grid-2" style="margin-top:16px">
-        <div class="card"><div class="card-head"><div class="card-title">Your wing in 3D</div><div class="seg" id="colorMode"><button class="active" data-mode="solid">Solid</button><button data-mode="pressure">Pressure</button><button data-mode="stress">Stress</button></div></div><div class="viewport" id="viewport3d"><div class="vp-hint">drag to rotate · scroll to zoom</div></div></div>
+        <div class="card"><div class="card-head"><div class="card-title">Your wing in 3D</div><div class="seg" id="colorMode"><button class="active" data-mode="solid">Solid</button><button data-mode="pressure">Pressure</button><button data-mode="stress">Stress</button></div></div><div class="viewport" id="viewport3d"><div class="vp-hint">drag to rotate · scroll to zoom</div></div><div class="legend" id="legend3d" style="display:none"></div></div>
         <div class="card"><div class="card-head"><div class="card-title">Efficiency curve</div><div class="card-sub">lift vs drag</div></div><canvas class="chart" id="polarChart"></canvas><div class="plain">Each dot is the wing at a different angle. Points further <b>up and to the left</b> mean more lift for less drag.</div></div>
       </div>
       <div class="grid grid-2" style="margin-top:16px">
@@ -406,35 +411,49 @@ const Optimizer = (function(){
 
 // ---------- VIZ ----------
 const Viz = (function(){
-  let scene,camera,renderer,wingGroup,raf,webglOK=true;
+  let scene,camera,renderer,wingGroup,raf,webglOK=true,container=null,ro=null;
   let theta=0.6,phi=0.9,radius=11,dragging=false,lx=0,ly=0;
-  function showFallback(container,msg){
-    container.innerHTML='<div style="position:absolute;inset:0;display:flex;flex-direction:column;'+
+  function showFallback(c,msg){
+    c.innerHTML='<div style="position:absolute;inset:0;display:flex;flex-direction:column;'+
       'align-items:center;justify-content:center;gap:8px;padding:20px;text-align:center;color:var(--muted)">'+
       '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#9a9384" stroke-width="1.5"><path d="M2 12 L20 5 L14 12 L20 19 Z"/></svg>'+
       '<div style="font-family:\'Space Grotesk\';font-size:13px;max-width:240px;line-height:1.5">'+msg+'</div></div>';
   }
-  function initThree(container){ const THREE=window.THREE;
-    if(!THREE){ webglOK=false; showFallback(container,'3D preview needs the graphics library, which didn\u2019t load. Everything else on this page still works.'); return false; }
-    const w=container.clientWidth||600, h=container.clientHeight||380;
+  function resize(){ if(!renderer||!container) return;
+    const w=container.clientWidth, h=container.clientHeight;
+    if(w<2||h<2) return;                    // container not laid out yet
+    renderer.setSize(w,h,false);
+    camera.aspect=w/h; camera.updateProjectionMatrix();
+  }
+  function initThree(c){ const THREE=window.THREE; container=c;
+    if(!THREE){ webglOK=false; showFallback(c,'3D preview needs the graphics library, which didn\u2019t load. Everything else on this page still works.'); return false; }
     try{
       scene=new THREE.Scene(); scene.background=new THREE.Color(0xf6f3ec);
-      camera=new THREE.PerspectiveCamera(45,w/h,0.1,1000); camera.position.set(6,4,9); camera.lookAt(0,0,0);
-      renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setSize(w,h);
+      camera=new THREE.PerspectiveCamera(45,1.6,0.1,1000); camera.position.set(6,4,9); camera.lookAt(0,0,0);
+      renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
       renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
     }catch(err){ webglOK=false;
-      showFallback(container,'Your browser couldn\u2019t start 3D graphics (WebGL). The charts and numbers below still work fully.');
+      showFallback(c,'Your browser couldn\u2019t start 3D graphics (WebGL). The charts and numbers below still work fully.');
       scene=camera=renderer=null; return false; }
     webglOK=true;
-    const hint=container.querySelector('.vp-hint'); container.innerHTML=''; if(hint) container.appendChild(hint);
-    container.appendChild(renderer.domElement);
-    const amb=new THREE.AmbientLight(0xffffff,0.75), dir=new THREE.DirectionalLight(0xffffff,0.7); dir.position.set(5,10,7); scene.add(amb,dir);
+    const hint=c.querySelector('.vp-hint'); c.innerHTML=''; if(hint) c.appendChild(hint);
+    renderer.domElement.style.display='block';
+    c.appendChild(renderer.domElement);
+    const amb=new THREE.AmbientLight(0xffffff,0.7), key=new THREE.DirectionalLight(0xffffff,0.65);
+    key.position.set(5,10,7); const fill=new THREE.DirectionalLight(0xffffff,0.25); fill.position.set(-6,4,-5);
+    scene.add(amb,key,fill);
     const grid=new THREE.GridHelper(20,20,0xcfc7b6,0xe1dacb); grid.position.y=-2; scene.add(grid);
     wingGroup=new THREE.Group(); scene.add(wingGroup);
     theta=0.6;phi=0.9;radius=11;
-    setupOrbit(container); animate(); return true;
+    setupOrbit(c); 
+    // size now, then again after layout settles (fixes 0-size on first reveal)
+    resize();
+    requestAnimationFrame(()=>{ resize(); });
+    setTimeout(resize,60);
+    if(window.ResizeObserver){ ro=new ResizeObserver(()=>resize()); ro.observe(c); }
+    animate(); return true;
   }
-  function setupOrbit(container){ const el=renderer.domElement;
+  function setupOrbit(c){ const el=renderer.domElement;
     el.addEventListener('pointerdown',e=>{dragging=true;lx=e.clientX;ly=e.clientY;});
     window.addEventListener('pointerup',()=>dragging=false);
     window.addEventListener('pointermove',e=>{ if(!dragging) return;
@@ -443,39 +462,81 @@ const Viz = (function(){
     el.addEventListener('wheel',e=>{ e.preventDefault(); radius=Math.max(4,Math.min(30,radius+e.deltaY*0.01)); },{passive:false});
   }
   function animate(){ raf=requestAnimationFrame(animate);
-    if(!camera) return;
+    if(!camera||!renderer) return;
     camera.position.x=radius*Math.sin(phi)*Math.cos(theta);
     camera.position.y=radius*Math.cos(phi);
     camera.position.z=radius*Math.sin(phi)*Math.sin(theta);
     camera.lookAt(0,0,0); renderer.render(scene,camera);
   }
-  function faceColor(opts,spanFrac,chordFrac){ const THREE=window.THREE;
-    if(opts.colorMode==='pressure'){ const t=Math.max(0,1-chordFrac*2);
-      return new THREE.Color().lerpColors(new THREE.Color(0x2e6b50),new THREE.Color(0xbcd9c8),t); }
-    if(opts.colorMode==='stress'){ const t=1-spanFrac;
-      return new THREE.Color().lerpColors(new THREE.Color(0xd8e3dc),new THREE.Color(0x1f4d3a),t); }
-    return new THREE.Color(0x2e6b50);
+  // Scientific "jet" colormap: t in [0,1] -> blue→cyan→green→yellow→red (CFD/FEA style)
+  function jet(t){ t=Math.max(0,Math.min(1,t));
+    // 5-stop ramp with full-saturation blue and red at the extremes
+    const stops=[[0.0,0.10,0.30,0.95],[0.25,0.10,0.85,0.95],[0.5,0.15,0.80,0.25],
+                 [0.75,0.95,0.80,0.10],[1.0,0.92,0.16,0.12]];
+    for(let i=0;i<stops.length-1;i++){ const a=stops[i],b=stops[i+1];
+      if(t>=a[0]&&t<=b[0]){ const u=(t-a[0])/((b[0]-a[0])||1);
+        return [a[1]+(b[1]-a[1])*u, a[2]+(b[2]-a[2])*u, a[3]+(b[3]-a[3])*u]; } }
+    return [stops[stops.length-1][1],stops[stops.length-1][2],stops[stops.length-1][3]];
+  }
+  // Per-vertex scalar at (spanFrac 0=root..1=tip, chordFrac 0=LE-upper..0.5=TE..1=LE-lower)
+  function scalarField(mode,spanFrac,chordFrac){
+    if(mode==='pressure'){
+      // Pressure coefficient surrogate: strong suction (low) just aft of LE on the
+      // upper surface, high pressure on lower surface near the LE; relaxes toward TE
+      // and toward the tip. Returns 0(low/suction)..1(high pressure).
+      const upper = chordFrac<0.5;
+      const x = upper ? chordFrac/0.5 : (1-chordFrac)/0.5;     // 0 at LE -> 1 at TE
+      const leFactor = Math.exp(-Math.pow(x*3.0,1.4));          // peaks near LE
+      const tipRelax = 0.55+0.45*(1-spanFrac);                  // weaker toward tip
+      let s;
+      if(upper){ s = 0.5 - 0.62*leFactor*tipRelax; }            // suction -> low
+      else     { s = 0.5 + 0.42*leFactor*tipRelax; }            // pressure -> high
+      return Math.max(0,Math.min(1,s));
+    }
+    if(mode==='stress'){
+      // Bending stress ~ root maximum, decays toward tip (cantilever). Slightly higher
+      // on spar caps (mid-chord). Returns 0(low/tip)..1(high/root).
+      const spanPart = Math.pow(1-spanFrac, 1.35);             // 1 at root -> 0 at tip
+      const chordMid = 1 - Math.abs((chordFrac%0.5)/0.5 - 0.5)*2*0.35; // caps hotter
+      return Math.max(0,Math.min(1, spanPart*chordMid));
+    }
+    return null;
   }
   function renderWing(wing,opts){ opts=opts||{}; const THREE=window.THREE; if(!wingGroup) return;
     while(wingGroup.children.length) wingGroup.remove(wingGroup.children[0]);
     const stations=wing.stations, ringLen=stations[0].ring.length;
+    const mode=opts.colorMode, sci=(mode==='pressure'||mode==='stress');
     [1,-1].forEach(sign=>{ const positions=[],colors=[];
       for(let s=0;s<stations.length-1;s++){ const r0=stations[s].ring,r1=stations[s+1].ring;
-        for(let i=0;i<ringLen-1;i++){ const quad=[r0[i],r0[i+1],r1[i],r1[i],r0[i+1],r1[i+1]];
-          for(const p of quad){ positions.push(p[0],p[2],sign*p[1]);
-            const c=faceColor(opts,s/stations.length,i/ringLen); colors.push(c.r,c.g,c.b); } } }
+        const sf0=s/(stations.length-1), sf1=(s+1)/(stations.length-1);
+        for(let i=0;i<ringLen-1;i++){
+          const cfA=i/(ringLen-1), cfB=(i+1)/(ringLen-1);
+          const verts=[[r0[i],sf0,cfA],[r0[i+1],sf0,cfB],[r1[i],sf1,cfA],
+                       [r1[i],sf1,cfA],[r0[i+1],sf0,cfB],[r1[i+1],sf1,cfB]];
+          for(const v of verts){ const p=v[0];
+            positions.push(p[0],p[2],sign*p[1]);
+            let col;
+            if(sci){ col=jet(scalarField(mode,v[1],v[2])); }
+            else { col=[0.18,0.42,0.31]; }                      // solid forest green
+            colors.push(col[0],col[1],col[2]);
+          }
+        }
+      }
       const geo=new THREE.BufferGeometry();
       geo.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
       geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
       geo.computeVertexNormals();
-      const mat=new THREE.MeshStandardMaterial({vertexColors:true,metalness:0.1,roughness:0.6,side:THREE.DoubleSide});
+      const mat=new THREE.MeshStandardMaterial({vertexColors:true,
+        metalness:sci?0.0:0.15, roughness:sci?0.85:0.55, side:THREE.DoubleSide,
+        flatShading:false});
       wingGroup.add(new THREE.Mesh(geo,mat));
     });
     wingGroup.position.set(0,0,0);
   }
   function dispose(){ if(raf) cancelAnimationFrame(raf);
+    if(ro){ try{ ro.disconnect(); }catch(e){} ro=null; }
     if(renderer){ try{ renderer.forceContextLoss&&renderer.forceContextLoss(); }catch(e){} renderer.domElement&&renderer.domElement.remove(); }
-    scene=camera=renderer=wingGroup=null;
+    scene=camera=renderer=wingGroup=container=null;
   }
   function lineChart(canvas,series,opts){ opts=opts||{}; const ctx=canvas.getContext('2d');
     const dpr=window.devicePixelRatio||1, W=canvas.width=canvas.clientWidth*dpr, H=canvas.height=canvas.clientHeight*dpr;
@@ -512,7 +573,7 @@ const Viz = (function(){
     ctx.fillStyle='#6e6a63'; ctx.font=(11*dpr)+"px 'Space Grotesk',sans-serif";
     if(opts.xLabel) ctx.fillText(opts.xLabel,W/2-24,H-6*dpr);
   }
-  return {initThree,renderWing,dispose,lineChart,barDist};
+  return {initThree,renderWing,dispose,lineChart,barDist,resize};
 })();
 
 // ============================================================
@@ -545,7 +606,7 @@ function renderDashboard(){ const r=state.results;
     kpi('Lift',f(r.aero.L,0),'N')+
     kpi('Drag',f(r.aero.D,0),'N')+
     kpi('Safety factor',f(r.struct.safety,2),'',r.struct.pass?'pass':'-below 1.5');
-  ensureViewport('viewport3d'); Viz.renderWing(r.wing,{colorMode:state.colorMode});
+  ensureViewport('viewport3d'); Viz.renderWing(r.wing,{colorMode:state.colorMode}); updateLegend();
   Viz.lineChart($('polarChart'),[{points:r.polar.map(p=>({x:p.CD,y:p.CL})),color:'#1f4d3a',dots:true}],{xLabel:'drag (CD)',yLabel:'lift (CL)'});
   const lp=r.aero.dist.filter(d=>d.y>=0).map(d=>({x:d.y,y:Math.abs(d.lift)}));
   Viz.barDist($('liftChart'),lp,{xLabel:'span (m)'});
@@ -713,12 +774,19 @@ document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=
 $('colorMode').addEventListener('click',e=>{ const btn=e.target.closest('button'); if(!btn) return;
   state.colorMode=btn.dataset.mode;
   document.querySelectorAll('#colorMode button').forEach(b=>b.classList.toggle('active',b===btn));
-  if(state.results) Viz.renderWing(state.results.wing,{colorMode:state.colorMode}); });
+  if(state.results) Viz.renderWing(state.results.wing,{colorMode:state.colorMode});
+  updateLegend(); });
 
-window.addEventListener('resize',()=>{ if(activeContainer){ Viz.dispose(); Viz.initThree(activeContainer);
-  if(state.results){ const m=(currentPage==='optimize'&&optState.best)?'pressure':(currentPage==='geometry'?'solid':state.colorMode);
-    const wing=(currentPage==='optimize'&&optState.best)?Geometry.buildWing(optState.best.params):state.results.wing;
-    Viz.renderWing(wing,{colorMode:m}); } } });
+function updateLegend(){ const el=$('legend3d'); if(!el) return;
+  const m=state.colorMode;
+  if(m==='pressure'){ el.style.display='flex';
+    el.innerHTML='<span class="lbl">Pressure</span><span class="lo">suction (low)</span><div class="bar"></div><span class="hi">high</span>'; }
+  else if(m==='stress'){ el.style.display='flex';
+    el.innerHTML='<span class="lbl">Stress</span><span class="lo">low (tip)</span><div class="bar"></div><span class="hi">high (root)</span>'; }
+  else { el.style.display='none'; }
+}
+
+window.addEventListener('resize',()=>{ if(activeContainer) Viz.resize(); });
 
 // landing is shown by default; app initializes on enter.
 })();
