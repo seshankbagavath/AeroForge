@@ -5,14 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>AeroForge — Aircraft Wing Design Platform</title>
 <meta name="description" content="An interactive aircraft wing design platform: generate wing shapes, simulate airflow, estimate structural loads, and evolve an optimal design — all in your browser." />
-<script src="vendor/three.min.js"></script>
+<script src="three.min.js"></script>
 <style>
 /* Self-hosted fonts (no external CDN) */
-@font-face{font-family:'Geist';font-style:normal;font-weight:400;font-display:swap;src:url('vendor/fonts/geist-sans-latin-400-normal.woff2') format('woff2')}
-@font-face{font-family:'Geist';font-style:normal;font-weight:500;font-display:swap;src:url('vendor/fonts/geist-sans-latin-500-normal.woff2') format('woff2')}
-@font-face{font-family:'Geist';font-style:normal;font-weight:600;font-display:swap;src:url('vendor/fonts/geist-sans-latin-600-normal.woff2') format('woff2')}
-@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:400;font-display:swap;src:url('vendor/fonts/space-grotesk-latin-400-normal.woff2') format('woff2')}
-@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;src:url('vendor/fonts/space-grotesk-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Geist';font-style:normal;font-weight:400;font-display:swap;src:url('geist-sans-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'Geist';font-style:normal;font-weight:500;font-display:swap;src:url('geist-sans-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Geist';font-style:normal;font-weight:600;font-display:swap;src:url('geist-sans-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:400;font-display:swap;src:url('space-grotesk-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;src:url('space-grotesk-latin-500-normal.woff2') format('woff2')}
 :root{
   --canvas:#f6f3ec; --surface:#fffdf9; --surface-warm:#faf7f0; --beige:#ece6db;
   --border:#e1dacb; --text:#1c1a16; --muted:#6b6557;
